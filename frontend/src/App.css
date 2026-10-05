@@ -1,0 +1,157 @@
+/* ========================================
+   LOGIN
+======================================== */
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f4f6f8;
+  padding: 20px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background-color: white;
+  padding: 40px;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.10);
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.login-header h1 {
+  margin: 0;
+  font-size: 36px;
+  color: #1f2937;
+}
+
+.login-header p {
+  margin-top: 8px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.login-card h2 {
+  margin-bottom: 25px;
+  color: #374151;
+  font-size: 22px;
+}
+
+.campo-login {
+  margin-bottom: 20px;
+}
+
+.campo-login label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: bold;
+  color: #374151;
+}
+
+.campo-login input {
+  width: 100%;
+  padding: 12px;
+  font-size: 15px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.campo-login input:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+.boton-login {
+  width: 100%;
+  padding: 13px;
+  margin-top: 5px;
+  border: none;
+  border-radius: 6px;
+  background-color: #1f2937;
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.boton-login:hover {
+  background-color: #374151;
+}
+
+.mensaje-login {
+  margin-top: 20px;
+  text-align: center;
+  color: #dc2626;
+  font-weight: bold;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background-color: #f4f6f8;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.contenedor {
+  width: 90%;
+  max-width: 1200px;
+  margin: 40px auto;
+}
+
+h1 {
+  color: #1f2937;
+}
+
+h2,
+h3 {
+  color: #374151;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 25px;
+  background-color: white;
+}
+
+th,
+td {
+  padding: 12px;
+  border: 1px solid #dddddd;
+  text-align: left;
+}
+
+th {
+  background-color: #e5e7eb;
+}
+
+.semaforo {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: bold;
+  color: white;
+}
+
+.verde {
+  background-color: green;
+}
+
+.amarillo {
+  background-color: #d4a000;
+}
+
+.rojo {
+  background-color: red;
+}
+

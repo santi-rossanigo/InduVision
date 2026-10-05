@@ -1,0 +1,13 @@
+# BACKEND
+backend/node_modules/
+backend/.env
+backend/crearUsuario.js
+
+# FRONTEND
+frontend/node_modules/
+frontend/.env
+frontend/dist/
+
+# Sistema
+.DS_Store
+Thumbs.db
