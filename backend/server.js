@@ -1084,6 +1084,184 @@ app.post('/login', async (req, res) => {
 });
 
 
+/* ==========================================
+   DASHBOARD - EVOLUCION MENSUAL DE COSTOS
+========================================== */
+
+app.get('/api/dashboard/costos-mensuales', async (req, res) => {
+
+    try {
+
+        const resultado = await pool.query(`
+
+            WITH movimientos AS (
+
+                SELECT
+                    DATE_TRUNC('month', fecha)::DATE AS mes,
+                    COALESCE(costo, 0) AS mantenimiento,
+                    0::NUMERIC AS reparacion
+                FROM mantenimiento
+
+                UNION ALL
+
+                SELECT
+                    DATE_TRUNC('month', fecha_inicio)::DATE AS mes,
+                    0::NUMERIC AS mantenimiento,
+                    COALESCE(costo, 0) AS reparacion
+                FROM reparacion
+
+            )
+
+            SELECT
+                TO_CHAR(mes, 'YYYY-MM') AS mes,
+
+                SUM(mantenimiento)::NUMERIC(14,2)
+                    AS costo_mantenimientos,
+
+                SUM(reparacion)::NUMERIC(14,2)
+                    AS costo_reparaciones
+
+            FROM movimientos
+
+            GROUP BY mes
+            ORDER BY mes;
+
+        `);
+
+        res.json(resultado.rows);
+
+    } catch (error) {
+
+        console.error('Error en costos mensuales:', error);
+
+        res.status(500).json({
+            error: 'No se pudieron obtener los costos mensuales'
+        });
+
+    }
+
+});
+
+
+/* ==========================================
+   DASHBOARD - MANTENIMIENTOS POR TIPO
+========================================== */
+
+app.get('/api/dashboard/mantenimientos-por-tipo', async (req, res) => {
+
+    try {
+
+        const resultado = await pool.query(`
+
+            SELECT
+                tipo,
+
+                COUNT(*)::INTEGER
+                    AS cantidad,
+
+                COALESCE(SUM(costo), 0)::NUMERIC(14,2)
+                    AS costo_total,
+
+                COALESCE(AVG(costo), 0)::NUMERIC(14,2)
+                    AS costo_promedio
+
+            FROM mantenimiento
+
+            GROUP BY tipo
+
+            ORDER BY cantidad DESC, tipo;
+
+        `);
+
+        res.json(resultado.rows);
+
+    } catch (error) {
+
+        console.error(
+            'Error en mantenimientos por tipo:',
+            error
+        );
+
+        res.status(500).json({
+            error: 'No se pudieron obtener los mantenimientos por tipo'
+        });
+
+    }
+
+});
+
+
+/* ==========================================
+   DASHBOARD - ANALISIS DE PROVEEDORES
+========================================== */
+
+app.get('/api/dashboard/reparaciones-por-proveedor', async (req, res) => {
+
+    try {
+
+        const resultado = await pool.query(`
+
+            SELECT
+                p.id_proveedor,
+                p.razon_social AS proveedor,
+                p.especialidad,
+                p.activo,
+
+                COUNT(r.id_reparacion)::INTEGER
+                    AS total_reparaciones,
+
+                COUNT(r.id_reparacion) FILTER (
+                    WHERE r.estado = 'En curso'
+                )::INTEGER AS en_curso,
+
+                COUNT(r.id_reparacion) FILTER (
+                    WHERE r.estado = 'Finalizada'
+                )::INTEGER AS finalizadas,
+
+                COUNT(r.id_reparacion) FILTER (
+                    WHERE r.estado = 'Cancelada'
+                )::INTEGER AS canceladas,
+
+                COUNT(DISTINCT r.id_maquina)::INTEGER
+                    AS maquinas_atendidas,
+
+                COALESCE(SUM(r.costo), 0)::NUMERIC(14,2)
+                    AS costo_total,
+
+                COALESCE(AVG(r.costo), 0)::NUMERIC(14,2)
+                    AS costo_promedio
+
+            FROM proveedor p
+
+            LEFT JOIN reparacion r
+                ON r.id_proveedor = p.id_proveedor
+
+            GROUP BY
+                p.id_proveedor,
+                p.razon_social,
+                p.especialidad,
+                p.activo
+
+            ORDER BY
+                total_reparaciones DESC,
+                p.razon_social;
+
+        `);
+
+        res.json(resultado.rows);
+
+    } catch (error) {
+
+        console.error('Error al analizar proveedores:', error);
+
+        res.status(500).json({
+            error: 'No se pudo obtener el análisis de proveedores'
+        });
+
+    }
+
+});
+
 // ========================================
 // INICIAR SERVIDOR
 // ========================================

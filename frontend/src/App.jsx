@@ -132,6 +132,270 @@ function GraficoCriticidad({ fallas = [] }) {
 }
 
 
+/* ========================================
+   GRAFICO - EVOLUCION MENSUAL DE COSTOS
+======================================== */
+
+function GraficoCostosMensuales({ filas = [] }) {
+
+  if (filas.length === 0) {
+    return <p>No hay costos mensuales registrados.</p>;
+  }
+
+  const etiquetas = filas.map(fila => {
+    const [anio, mes] = fila.mes.split('-').map(Number);
+
+    return new Date(anio, mes - 1, 1)
+      .toLocaleDateString('es-AR', {
+        month: 'short',
+        year: 'numeric'
+      });
+  });
+
+  const datos = {
+    labels: etiquetas,
+
+    datasets: [
+      {
+        label: 'Mantenimientos',
+        data: filas.map(f =>
+          Number(f.costo_mantenimientos)
+        ),
+        backgroundColor: '#2563eb'
+      },
+      {
+        label: 'Reparaciones',
+        data: filas.map(f =>
+          Number(f.costo_reparaciones)
+        ),
+        backgroundColor: '#0d9488'
+      }
+    ]
+  };
+
+  const opciones = {
+    responsive: true,
+    maintainAspectRatio: false,
+
+    plugins: {
+      legend: {
+        position: 'bottom'
+      },
+      tooltip: {
+        callbacks: {
+          label: contexto =>
+            `${contexto.dataset.label}: ${dinero(contexto.parsed.y)}`
+        }
+      }
+    },
+
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          callback: valor =>
+            '$' + Number(valor).toLocaleString('es-AR')
+        }
+      }
+    }
+  };
+
+  return (
+    <div className="grafico-area">
+      <Bar data={datos} options={opciones} />
+    </div>
+  );
+}
+
+
+/* ========================================
+   GRAFICO - MANTENIMIENTOS POR TIPO
+======================================== */
+
+function GraficoMantenimientosPorTipo({ filas = [] }) {
+
+  if (filas.length === 0) {
+    return <p>No hay mantenimientos registrados.</p>;
+  }
+
+  const datos = {
+    labels: filas.map(f => f.tipo),
+
+    datasets: [
+      {
+        label: 'Cantidad de mantenimientos',
+
+        data: filas.map(f => Number(f.cantidad)),
+
+        backgroundColor: [
+          '#2563eb',
+          '#0d9488',
+          '#f59e0b',
+          '#8b5cf6'
+        ],
+
+        borderRadius: 6
+      }
+    ]
+  };
+
+  const opciones = {
+    responsive: true,
+    maintainAspectRatio: false,
+
+    plugins: {
+      legend: {
+        position: 'bottom'
+      },
+
+      tooltip: {
+        callbacks: {
+          afterLabel: contexto => {
+            const fila = filas[contexto.dataIndex];
+
+            return 'Costo total: ' +
+              dinero(fila.costo_total);
+          }
+        }
+      }
+    },
+
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          precision: 0
+        }
+      }
+    }
+  };
+
+  return (
+    <>
+      <div className="grafico-area">
+        <Bar data={datos} options={opciones} />
+      </div>
+
+      <div className="tabla-contenedor">
+        <table>
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th>Cantidad</th>
+              <th>Costo total</th>
+              <th>Costo promedio</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {filas.map(f => (
+              <tr key={f.tipo}>
+                <td>{f.tipo}</td>
+                <td>{f.cantidad}</td>
+                <td>{dinero(f.costo_total)}</td>
+                <td>{dinero(f.costo_promedio)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+
+/* ========================================
+   GRAFICO - REPARACIONES POR PROVEEDOR
+======================================== */
+
+function GraficoReparacionesProveedor({ filas = [] }) {
+
+  if (filas.length === 0) {
+    return <p>No hay proveedores registrados.</p>;
+  }
+
+  const datos = {
+    labels: filas.map(f => f.proveedor),
+
+    datasets: [
+      {
+        label: 'En curso',
+        data: filas.map(f => Number(f.en_curso)),
+        backgroundColor: '#d4a000'
+      },
+      {
+        label: 'Finalizadas',
+        data: filas.map(f => Number(f.finalizadas)),
+        backgroundColor: '#16803c'
+      },
+      {
+        label: 'Canceladas',
+        data: filas.map(f => Number(f.canceladas)),
+        backgroundColor: '#dc2626'
+      }
+    ]
+  };
+
+  const opciones = {
+    responsive: true,
+    maintainAspectRatio: false,
+    indexAxis: 'x',
+
+    plugins: {
+      legend: {
+        position: 'bottom'
+      }
+    },
+
+  scales: {
+    x: {
+      stacked: true
+    },
+    y: {
+      stacked: true,
+      beginAtZero: true,
+      ticks: {
+        precision: 0
+      }
+    }
+  }
+  };
+
+  return (
+    <>
+      <div className="grafico-area">
+        <Bar data={datos} options={opciones} />
+      </div>
+
+      <div className="tabla-contenedor">
+        <table>
+          <thead>
+            <tr>
+              <th>Proveedor</th>
+              <th>Reparaciones</th>
+              <th>Máquinas atendidas</th>
+              <th>Costo total</th>
+              <th>Costo promedio</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {filas.map(f => (
+              <tr key={f.id_proveedor}>
+                <td>{f.proveedor}</td>
+                <td>{f.total_reparaciones}</td>
+                <td>{f.maquinas_atendidas}</td>
+                <td>{dinero(f.costo_total)}</td>
+                <td>{dinero(f.costo_promedio)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 const API = 'http://localhost:3000';
 
 function TarjetaKpi({ titulo, valor, tipo = '' }) {
@@ -181,6 +445,12 @@ function App() {
 
   // Dashboard general
   const [resumen, setResumen] = useState(null);
+  const [costosMensuales, setCostosMensuales] = useState(null);
+  const [mantenimientosPorTipo, setMantenimientosPorTipo] = useState(null);
+  const [proveedores, setProveedores] = useState(null);
+  const [errorProveedores, setErrorProveedores] = useState('');
+  const [errorMantenimientos, setErrorMantenimientos] = useState('');
+  const [errorCostosMensuales, setErrorCostosMensuales] = useState('');
   const [maquinas, setMaquinas] = useState([]);
   const [plantas, setPlantas] = useState([]);
   const [fallasPorSector, setFallasPorSector] = useState([]);
@@ -199,8 +469,85 @@ function App() {
   const [reparaciones, setReparaciones] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [errorNavegacion, setErrorNavegacion] = useState('');
+  
+  async function cargarCostosMensuales() {
+
+    try {
+
+      setErrorCostosMensuales('');
+
+      const datos = await solicitar(
+        '/api/dashboard/costos-mensuales'
+      );
+
+      setCostosMensuales(datos);
+
+    } catch (error) {
+
+      console.error(error);
+
+      setErrorCostosMensuales(
+        'No se pudo cargar la evolución mensual de costos.'
+      );
+
+    }
+  }
+
+  async function cargarMantenimientosPorTipo() {
+
+    try {
+
+      setErrorMantenimientos('');
+
+      const datos = await solicitar(
+        '/api/dashboard/mantenimientos-por-tipo'
+      );
+
+      setMantenimientosPorTipo(datos);
+
+    } catch (error) {
+
+      console.error(error);
+
+      setErrorMantenimientos(
+        'No se pudieron cargar los mantenimientos.'
+      );
+
+    }
+  }
+  
+  /* ========================================
+    CARGAR ANALISIS DE PROVEEDORES
+  ======================================== */
+
+  async function cargarProveedores() {
+
+    try {
+
+      setErrorProveedores('');
+
+      const datos = await solicitar(
+        '/api/dashboard/reparaciones-por-proveedor'
+      );
+
+      setProveedores(datos);
+
+    } catch (error) {
+
+      console.error(error);
+
+      setErrorProveedores(
+        'No se pudo cargar el análisis de proveedores.'
+      );
+
+    }
+  }
+
 
   async function cargarDashboard() {
+    cargarMantenimientosPorTipo();
+    cargarProveedores();
+    cargarCostosMensuales();
     setErrorGeneral('');
     const resultados = await Promise.allSettled([
       solicitar('/api/dashboard/resumen'),
@@ -621,6 +968,131 @@ function App() {
                 <GraficoFallasPorSector sectores={fallasPorSector} mostrarPlanta />
               </article>
             </div>
+          </section>
+
+          
+          {/* EVOLUCION MENSUAL DE COSTOS */}
+
+          <section className="dashboard-seccion">
+
+            <h2>Evolución mensual de costos</h2>
+
+            <p className="subtitulo-dashboard">
+              Comparación de los costos registrados
+              de mantenimiento y reparación por mes.
+            </p>
+
+            {errorCostosMensuales ? (
+
+              <p className="mensaje-error">
+                {errorCostosMensuales}
+              </p>
+
+            ) : costosMensuales === null ? (
+
+              <p>Cargando evolución mensual...</p>
+
+            ) : (
+
+              <div className="graficos-grid">
+
+                <article className="grafico-card">
+
+                  <h3>Costos por mes</h3>
+
+                  <GraficoCostosMensuales
+                    filas={costosMensuales}
+                  />
+
+                </article>
+
+              </div>
+
+            )}
+
+          </section>
+          
+          
+          {/* MANTENIMIENTOS POR TIPO */}
+
+          <section className="dashboard-seccion">
+
+            <h2>Análisis de mantenimientos</h2>
+
+            <p className="subtitulo-dashboard">
+              Cantidad y costos de mantenimiento
+              agrupados por tipo de intervención.
+            </p>
+
+            {errorMantenimientos ? (
+
+              <p className="mensaje-error">
+                {errorMantenimientos}
+              </p>
+
+            ) : mantenimientosPorTipo === null ? (
+
+              <p>Cargando mantenimientos...</p>
+
+            ) : (
+
+              <div className="graficos-grid">
+
+                <article className="grafico-card">
+
+                  <h3>Mantenimientos por tipo</h3>
+
+                  <GraficoMantenimientosPorTipo
+                    filas={mantenimientosPorTipo}
+                  />
+
+                </article>
+
+              </div>
+
+            )}
+
+          </section>
+          
+          {/* ANALISIS DE REPARACIONES Y PROVEEDORES */}
+
+          <section className="dashboard-seccion">
+
+            <h2>Análisis de reparaciones y proveedores</h2>
+
+            <p className="subtitulo-dashboard">
+              Cantidad de intervenciones, máquinas atendidas
+              y costos registrados por proveedor.
+            </p>
+
+            {errorProveedores ? (
+
+              <p className="mensaje-error">
+                {errorProveedores}
+              </p>
+
+            ) : proveedores === null ? (
+
+              <p>Cargando análisis de proveedores...</p>
+
+            ) : (
+
+              <div className="graficos-grid">
+
+                <article className="grafico-card">
+
+                  <h3>Reparaciones por proveedor</h3>
+
+                  <GraficoReparacionesProveedor
+                    filas={proveedores}
+                  />
+
+                </article>
+
+              </div>
+
+            )}
+
           </section>
 
           <section className="dashboard-seccion">
