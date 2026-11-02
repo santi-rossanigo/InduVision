@@ -1,13 +1,54 @@
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const express = require('express');
 const pool = require('./db');
 const bcrypt = require('bcrypt');
 const cors = require('cors');
+const session = require('express-session');
 
 const app = express();
 
-app.use(cors());
+// La clave de firma no debe guardarse en Git ni tener un valor predeterminado.
+if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
+    throw new Error('Falta SESSION_SECRET en backend/.env (mínimo 32 caracteres).');
+}
+
+app.disable('x-powered-by');
+
+// El frontend de Vite se ejecuta en otro puerto y necesita enviar cookies.
+app.use(cors({
+    origin: 'http://localhost:5173',
+    credentials: true
+}));
 app.use(express.json());
+
+// Sesiones de desarrollo: firma de cookie, expiración y almacenamiento del lado servidor.
+// MemoryStore es adecuado para pruebas locales, no para despliegues en producción.
+app.use(session({
+    name: 'induvision.sid',
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 8 * 60 * 60 * 1000
+    }
+}));
+
+// Se aplica a TODAS las rutas /api, incluso las definidas más abajo.
+function requerirSesion(req, res, next) {
+    if (!req.session || !req.session.usuario) {
+        return res.status(401).json({
+            error: 'Debés iniciar sesión para acceder a estos datos.'
+        });
+    }
+    next();
+}
+
+app.use('/api', requerirSesion);
 
 
 // ========================================
@@ -23,7 +64,7 @@ app.get('/', (req, res) => {
 // COMPROBAR CONEXION A POSTGRESQL
 // ========================================
 
-app.get('/prueba-db', async (req, res) => {
+app.get('/prueba-db', requerirSesion, async (req, res) => {
 
     try {
 
@@ -1017,32 +1058,34 @@ app.get('/api/dashboard/resumen', async (req, res) => {
 app.post('/login', async (req, res) => {
 
     try {
+        const { email, password } = req.body || {};
 
-        const { email, password } = req.body;
+        if (typeof email !== 'string' || !email.trim() ||
+            typeof password !== 'string' || !password) {
+            return res.status(400).json({
+                mensaje: 'Ingresá un email y una contraseña válidos.'
+            });
+        }
 
         const resultado = await pool.query(
-            `SELECT *
+            `SELECT id_usuario, nombre, email, rol, activo, password_hash
              FROM usuario
              WHERE email = $1`,
-            [email]
+            [email.trim()]
         );
 
         if (resultado.rows.length === 0) {
-
             return res.status(401).json({
                 mensaje: 'Email o contraseña incorrectos'
             });
-
         }
 
         const usuario = resultado.rows[0];
 
         if (!usuario.activo) {
-
             return res.status(403).json({
                 mensaje: 'Usuario desactivado'
             });
-
         }
 
         const passwordCorrecta = await bcrypt.compare(
@@ -1051,39 +1094,64 @@ app.post('/login', async (req, res) => {
         );
 
         if (!passwordCorrecta) {
-
             return res.status(401).json({
                 mensaje: 'Email o contraseña incorrectos'
             });
-
         }
 
-        res.json({
+        // Regenerar la sesión al autenticarse previene fijación de sesión.
+        req.session.regenerate((errorSesion) => {
+            if (errorSesion) {
+                console.error('Error al crear sesión:', errorSesion);
+                return res.status(500).json({
+                    mensaje: 'No se pudo iniciar la sesión'
+                });
+            }
 
-            mensaje: 'Login correcto',
-
-            usuario: {
+            req.session.usuario = {
                 id: usuario.id_usuario,
                 nombre: usuario.nombre,
                 email: usuario.email,
                 rol: usuario.rol
-            }
+            };
 
+            req.session.save((errorGuardado) => {
+                if (errorGuardado) {
+                    console.error('Error al guardar sesión:', errorGuardado);
+                    return res.status(500).json({
+                        mensaje: 'No se pudo guardar la sesión'
+                    });
+                }
+
+                res.json({
+                    mensaje: 'Login correcto',
+                    usuario: req.session.usuario
+                });
+            });
         });
 
     } catch (error) {
-
-        console.error(error);
-
+        console.error('Error durante login:', error);
         res.status(500).json({
             mensaje: 'Error interno del servidor'
         });
-
     }
-
 });
 
+// Destruir la sesión activa y borrar la cookie del navegador.
+app.post('/logout', requerirSesion, (req, res) => {
+    req.session.destroy((error) => {
+        if (error) {
+            console.error('Error al cerrar sesión:', error);
+            return res.status(500).json({
+                mensaje: 'No se pudo cerrar la sesión'
+            });
+        }
 
+        res.clearCookie('induvision.sid', { path: '/' });
+        res.json({ mensaje: 'Sesión cerrada' });
+    });
+});
 
 
 /* ==========================================

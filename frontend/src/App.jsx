@@ -432,7 +432,7 @@ function fecha(valor) {
 }
 
 async function solicitar(ruta) {
-  const respuesta = await fetch(`${API}${ruta}`);
+  const respuesta = await fetch(`${API}${ruta}`, { credentials: 'include' });
   if (!respuesta.ok) throw new Error(`Error HTTP ${respuesta.status}`);
   return respuesta.json();
 }
@@ -714,6 +714,7 @@ function App() {
     try {
       const respuesta = await fetch(`${API}/login`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
