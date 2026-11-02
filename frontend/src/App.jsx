@@ -446,6 +446,9 @@ function App() {
   // Dashboard general
   const [resumen, setResumen] = useState(null);
   const [costosMensuales, setCostosMensuales] = useState(null);
+  const [fechaDesde, setFechaDesde] = useState('');
+  const [fechaHasta, setFechaHasta] = useState('');
+  const [cargandoCostos, setCargandoCostos] = useState(false);
   const [mantenimientosPorTipo, setMantenimientosPorTipo] = useState(null);
   const [proveedores, setProveedores] = useState(null);
   const [errorProveedores, setErrorProveedores] = useState('');
@@ -470,15 +473,29 @@ function App() {
   const [cargando, setCargando] = useState(false);
   const [errorNavegacion, setErrorNavegacion] = useState('');
   
-  async function cargarCostosMensuales() {
+  
+  async function cargarCostosMensuales(desde = '', hasta = '') {
 
     try {
 
+      setCargandoCostos(true);
       setErrorCostosMensuales('');
 
-      const datos = await solicitar(
-        '/api/dashboard/costos-mensuales'
-      );
+      const parametros = new URLSearchParams();
+
+      if (desde) {
+        parametros.append('desde', desde);
+      }
+
+      if (hasta) {
+        parametros.append('hasta', hasta);
+      }
+
+      const ruta = parametros.toString()
+        ? `/api/dashboard/costos-mensuales?${parametros.toString()}`
+        : '/api/dashboard/costos-mensuales';
+
+      const datos = await solicitar(ruta);
 
       setCostosMensuales(datos);
 
@@ -487,11 +504,16 @@ function App() {
       console.error(error);
 
       setErrorCostosMensuales(
-        'No se pudo cargar la evolución mensual de costos.'
+        'No se pudieron cargar los costos del período seleccionado.'
       );
+
+    } finally {
+
+      setCargandoCostos(false);
 
     }
   }
+
 
   async function cargarMantenimientosPorTipo() {
 
@@ -981,6 +1003,92 @@ function App() {
               Comparación de los costos registrados
               de mantenimiento y reparación por mes.
             </p>
+            
+            {/* FILTROS DE FECHAS */}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                cargarCostosMensuales(fechaDesde, fechaHasta);
+              }}
+              className="filtros-fechas"
+              style={{
+                display: 'flex',
+                gap: '12px',
+                flexWrap: 'wrap',
+                alignItems: 'end',
+                marginBottom: '20px'
+              }}
+            >
+
+              <label>
+                Fecha desde
+
+                <input
+                  type="date"
+                  value={fechaDesde}
+                  onChange={(e) => setFechaDesde(e.target.value)}
+                  style={{
+                    display: 'block',
+                    padding: '10px',
+                    marginTop: '6px'
+                  }}
+                />
+              </label>
+
+              <label>
+                Fecha hasta
+
+                <input
+                  type="date"
+                  value={fechaHasta}
+                  onChange={(e) => setFechaHasta(e.target.value)}
+                  style={{
+                    display: 'block',
+                    padding: '10px',
+                    marginTop: '6px'
+                  }}
+                />
+              </label>
+
+              <button
+                type="submit"
+                className="boton-drill"
+                disabled={
+                  cargandoCostos ||
+                  Boolean(fechaDesde && fechaHasta && fechaDesde > fechaHasta)
+                }
+              >
+                Aplicar filtros
+              </button>
+
+              <button
+                type="button"
+                className="boton-volver"
+                disabled={cargandoCostos}
+                onClick={() => {
+
+                  setFechaDesde('');
+                  setFechaHasta('');
+
+                  cargarCostosMensuales();
+
+                }}
+              >
+                Limpiar filtros
+              </button>
+
+            </form>
+
+            {fechaDesde && fechaHasta && fechaDesde > fechaHasta && (
+              <p className="mensaje-error">
+                La fecha inicial no puede ser posterior a la final.
+              </p>
+            )}
+
+            {cargandoCostos && (
+              <p>Actualizando costos...</p>
+            )}
 
             {errorCostosMensuales ? (
 

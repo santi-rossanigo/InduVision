@@ -1084,13 +1084,47 @@ app.post('/login', async (req, res) => {
 });
 
 
+
 /* ==========================================
-   DASHBOARD - EVOLUCION MENSUAL DE COSTOS
+   DASHBOARD - COSTOS MENSUALES CON FILTROS
 ========================================== */
 
 app.get('/api/dashboard/costos-mensuales', async (req, res) => {
 
     try {
+
+        // Fechas opcionales recibidas desde React
+        const desde = req.query.desde ?? null;
+        const hasta = req.query.hasta ?? null;
+
+        // Validar las fechas
+        const fechaValida = (valor) => {
+            if (typeof valor !== 'string') return false;
+
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+                return false;
+            }
+
+            const fecha = new Date(valor);
+
+            return !Number.isNaN(fecha.getTime()) &&
+                fecha.toISOString().slice(0, 10) === valor;
+        };
+
+        if (
+            (desde !== null && !fechaValida(desde)) ||
+            (hasta !== null && !fechaValida(hasta))
+        ) {
+            return res.status(400).json({
+                error: 'Las fechas deben tener formato YYYY-MM-DD'
+            });
+        }
+
+        if (desde && hasta && desde > hasta) {
+            return res.status(400).json({
+                error: 'La fecha inicial no puede ser posterior a la final'
+            });
+        }
 
         const resultado = await pool.query(`
 
@@ -1100,7 +1134,13 @@ app.get('/api/dashboard/costos-mensuales', async (req, res) => {
                     DATE_TRUNC('month', fecha)::DATE AS mes,
                     COALESCE(costo, 0) AS mantenimiento,
                     0::NUMERIC AS reparacion
+
                 FROM mantenimiento
+
+                WHERE
+                    ($1::DATE IS NULL OR fecha >= $1::DATE)
+                    AND
+                    ($2::DATE IS NULL OR fecha <= $2::DATE)
 
                 UNION ALL
 
@@ -1108,7 +1148,13 @@ app.get('/api/dashboard/costos-mensuales', async (req, res) => {
                     DATE_TRUNC('month', fecha_inicio)::DATE AS mes,
                     0::NUMERIC AS mantenimiento,
                     COALESCE(costo, 0) AS reparacion
+
                 FROM reparacion
+
+                WHERE
+                    ($1::DATE IS NULL OR fecha_inicio >= $1::DATE)
+                    AND
+                    ($2::DATE IS NULL OR fecha_inicio <= $2::DATE)
 
             )
 
@@ -1126,16 +1172,16 @@ app.get('/api/dashboard/costos-mensuales', async (req, res) => {
             GROUP BY mes
             ORDER BY mes;
 
-        `);
+        `, [desde, hasta]);
 
         res.json(resultado.rows);
 
     } catch (error) {
 
-        console.error('Error en costos mensuales:', error);
+        console.error('Error al filtrar costos:', error);
 
         res.status(500).json({
-            error: 'No se pudieron obtener los costos mensuales'
+            error: 'No se pudieron obtener los costos'
         });
 
     }
