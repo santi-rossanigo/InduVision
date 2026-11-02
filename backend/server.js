@@ -1085,21 +1085,59 @@ app.post('/login', async (req, res) => {
 
 
 
+
 /* ==========================================
-   DASHBOARD - COSTOS MENSUALES CON FILTROS
+   COSTOS MENSUALES
+   FILTROS DE FECHA + DRILL DOWN
 ========================================== */
 
 app.get('/api/dashboard/costos-mensuales', async (req, res) => {
 
     try {
 
-        // Fechas opcionales recibidas desde React
+        // FILTROS DE FECHAS
+
         const desde = req.query.desde ?? null;
         const hasta = req.query.hasta ?? null;
 
-        // Validar las fechas
+        // FILTROS DE NAVEGACION
+
+        const idPlanta = req.query.id_planta === undefined
+            ? null
+            : Number(req.query.id_planta);
+
+        const idSector = req.query.id_sector === undefined
+            ? null
+            : Number(req.query.id_sector);
+
+        const idMaquina = req.query.id_maquina === undefined
+            ? null
+            : Number(req.query.id_maquina);
+
+        // VALIDACION DE IDENTIFICADORES
+
+        const idValido = (id) => {
+            return id === null ||
+                (Number.isSafeInteger(id) && id > 0);
+        };
+
+        if (
+            !idValido(idPlanta) ||
+            !idValido(idSector) ||
+            !idValido(idMaquina)
+        ) {
+            return res.status(400).json({
+                error: 'Identificadores inválidos'
+            });
+        }
+
+        // VALIDACION DE FECHAS
+
         const fechaValida = (valor) => {
-            if (typeof valor !== 'string') return false;
+
+            if (typeof valor !== 'string') {
+                return false;
+            }
 
             if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) {
                 return false;
@@ -1116,50 +1154,98 @@ app.get('/api/dashboard/costos-mensuales', async (req, res) => {
             (hasta !== null && !fechaValida(hasta))
         ) {
             return res.status(400).json({
-                error: 'Las fechas deben tener formato YYYY-MM-DD'
+                error: 'Formato de fecha inválido'
             });
         }
 
         if (desde && hasta && desde > hasta) {
             return res.status(400).json({
-                error: 'La fecha inicial no puede ser posterior a la final'
+                error: 'La fecha inicial supera la final'
             });
         }
+
+        // CONSULTA SQL DIRECTA SIN VIEWS
 
         const resultado = await pool.query(`
 
             WITH movimientos AS (
 
+                -- COSTOS DE MANTENIMIENTO
+
                 SELECT
-                    DATE_TRUNC('month', fecha)::DATE AS mes,
-                    COALESCE(costo, 0) AS mantenimiento,
+                    DATE_TRUNC('month', mt.fecha)::DATE AS mes,
+
+                    COALESCE(mt.costo, 0)
+                        AS mantenimiento,
+
                     0::NUMERIC AS reparacion
 
-                FROM mantenimiento
+                FROM mantenimiento mt
+
+                INNER JOIN maquina m
+                    ON m.id_maquina = mt.id_maquina
+
+                INNER JOIN sector s
+                    ON s.id_sector = m.id_sector
 
                 WHERE
-                    ($1::DATE IS NULL OR fecha >= $1::DATE)
-                    AND
-                    ($2::DATE IS NULL OR fecha <= $2::DATE)
+                    ($1::DATE IS NULL
+                        OR mt.fecha >= $1::DATE)
+
+                    AND ($2::DATE IS NULL
+                        OR mt.fecha <= $2::DATE)
+
+                    AND ($3::INTEGER IS NULL
+                        OR s.id_planta = $3)
+
+                    AND ($4::INTEGER IS NULL
+                        OR s.id_sector = $4)
+
+                    AND ($5::INTEGER IS NULL
+                        OR m.id_maquina = $5)
 
                 UNION ALL
 
-                SELECT
-                    DATE_TRUNC('month', fecha_inicio)::DATE AS mes,
-                    0::NUMERIC AS mantenimiento,
-                    COALESCE(costo, 0) AS reparacion
+                -- COSTOS DE REPARACION
 
-                FROM reparacion
+                SELECT
+                    DATE_TRUNC('month', r.fecha_inicio)::DATE AS mes,
+
+                    0::NUMERIC AS mantenimiento,
+
+                    COALESCE(r.costo, 0)
+                        AS reparacion
+
+                FROM reparacion r
+
+                INNER JOIN maquina m
+                    ON m.id_maquina = r.id_maquina
+
+                INNER JOIN sector s
+                    ON s.id_sector = m.id_sector
 
                 WHERE
-                    ($1::DATE IS NULL OR fecha_inicio >= $1::DATE)
-                    AND
-                    ($2::DATE IS NULL OR fecha_inicio <= $2::DATE)
+                    ($1::DATE IS NULL
+                        OR r.fecha_inicio >= $1::DATE)
+
+                    AND ($2::DATE IS NULL
+                        OR r.fecha_inicio <= $2::DATE)
+
+                    AND ($3::INTEGER IS NULL
+                        OR s.id_planta = $3)
+
+                    AND ($4::INTEGER IS NULL
+                        OR s.id_sector = $4)
+
+                    AND ($5::INTEGER IS NULL
+                        OR m.id_maquina = $5)
 
             )
 
             SELECT
-                TO_CHAR(mes, 'YYYY-MM') AS mes,
+
+                TO_CHAR(mes, 'YYYY-MM')
+                    AS mes,
 
                 SUM(mantenimiento)::NUMERIC(14,2)
                     AS costo_mantenimientos,
@@ -1170,23 +1256,31 @@ app.get('/api/dashboard/costos-mensuales', async (req, res) => {
             FROM movimientos
 
             GROUP BY mes
+
             ORDER BY mes;
 
-        `, [desde, hasta]);
+        `, [
+            desde,
+            hasta,
+            idPlanta,
+            idSector,
+            idMaquina
+        ]);
 
         res.json(resultado.rows);
 
     } catch (error) {
 
-        console.error('Error al filtrar costos:', error);
+        console.error('Error en costos mensuales:', error);
 
         res.status(500).json({
-            error: 'No se pudieron obtener los costos'
+            error: 'No se pudieron obtener los costos mensuales'
         });
 
     }
 
 });
+
 
 
 /* ==========================================

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import './App.css';
 
 // ========================================
@@ -437,6 +437,111 @@ async function solicitar(ruta) {
   return respuesta.json();
 }
 
+/* ========================================
+   COSTOS MENSUALES: FILTROS EN CADA NIVEL
+======================================== */
+
+function SeccionCostosMensuales({
+  contexto,
+  costosMensuales,
+  errorCostosMensuales,
+  cargandoCostos,
+  fechaDesde,
+  fechaHasta,
+  filtroAplicado,
+  setFechaDesde,
+  setFechaHasta,
+  aplicarFiltros,
+  limpiarFiltros
+}) {
+  const fechasInvalidas = Boolean(
+    fechaDesde && fechaHasta && fechaDesde > fechaHasta
+  );
+
+  const periodoActivo = filtroAplicado.desde || filtroAplicado.hasta
+    ? `Período aplicado: ${filtroAplicado.desde ? fecha(filtroAplicado.desde) : 'sin límite inicial'} al ${filtroAplicado.hasta ? fecha(filtroAplicado.hasta) : 'sin límite final'}`
+    : 'Período aplicado: todos los registros';
+
+  return (
+    <section className="dashboard-seccion">
+      <h2>Evolución mensual de costos</h2>
+      <p className="subtitulo-dashboard">
+        Costos registrados de mantenimiento y reparación. Alcance: <strong>{contexto}</strong>.
+      </p>
+
+      <form
+        className="filtros-fechas"
+        onSubmit={aplicarFiltros}
+        style={{
+          display: 'flex',
+          gap: '12px',
+          flexWrap: 'wrap',
+          alignItems: 'end',
+          marginBottom: '20px'
+        }}
+      >
+        <label>
+          Fecha desde
+          <input
+            type="date"
+            value={fechaDesde}
+            onChange={e => setFechaDesde(e.target.value)}
+            style={{ display: 'block', padding: '10px', marginTop: '6px' }}
+          />
+        </label>
+
+        <label>
+          Fecha hasta
+          <input
+            type="date"
+            value={fechaHasta}
+            onChange={e => setFechaHasta(e.target.value)}
+            style={{ display: 'block', padding: '10px', marginTop: '6px' }}
+          />
+        </label>
+
+        <button
+          type="submit"
+          className="boton-drill"
+          disabled={cargandoCostos || fechasInvalidas}
+        >
+          Aplicar filtros
+        </button>
+
+        <button
+          type="button"
+          className="boton-volver"
+          disabled={cargandoCostos}
+          onClick={limpiarFiltros}
+        >
+          Limpiar filtros
+        </button>
+      </form>
+
+      {fechasInvalidas && (
+        <p className="mensaje-error">La fecha inicial no puede ser posterior a la final.</p>
+      )}
+
+      <p className="subtitulo-dashboard">{periodoActivo}</p>
+
+      {cargandoCostos ? (
+        <p>Actualizando costos...</p>
+      ) : errorCostosMensuales ? (
+        <p className="mensaje-error">{errorCostosMensuales}</p>
+      ) : costosMensuales === null ? (
+        <p>Cargando evolución mensual...</p>
+      ) : (
+        <div className="graficos-grid">
+          <article className="grafico-card">
+            <h3>Costos por mes</h3>
+            <GraficoCostosMensuales filas={costosMensuales} />
+          </article>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -448,6 +553,7 @@ function App() {
   const [costosMensuales, setCostosMensuales] = useState(null);
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
+  const [filtroAplicado, setFiltroAplicado] = useState({ desde: '', hasta: '' });
   const [cargandoCostos, setCargandoCostos] = useState(false);
   const [mantenimientosPorTipo, setMantenimientosPorTipo] = useState(null);
   const [proveedores, setProveedores] = useState(null);
@@ -474,46 +580,62 @@ function App() {
   const [errorNavegacion, setErrorNavegacion] = useState('');
   
   
-  async function cargarCostosMensuales(desde = '', hasta = '') {
+  // El alcance cambia automáticamente con el Drill Down y Drill Up.
+  const idPlantaCostos = plantaSeleccionada?.id_planta ?? null;
+  const idSectorCostos = sectorSeleccionado?.id_sector ?? null;
+  const idMaquinaCostos = maquinaSeleccionada?.id_maquina ?? null;
 
-    try {
+  useEffect(() => {
+    if (!usuario) return;
 
+    // Evita que una respuesta anterior reemplace datos de otro nivel.
+    let vigente = true;
+
+    async function consultarCostos() {
       setCargandoCostos(true);
       setErrorCostosMensuales('');
+      setCostosMensuales(null);
 
       const parametros = new URLSearchParams();
 
-      if (desde) {
-        parametros.append('desde', desde);
+      if (filtroAplicado.desde) parametros.set('desde', filtroAplicado.desde);
+      if (filtroAplicado.hasta) parametros.set('hasta', filtroAplicado.hasta);
+      if (idPlantaCostos !== null) parametros.set('id_planta', String(idPlantaCostos));
+      if (idSectorCostos !== null) parametros.set('id_sector', String(idSectorCostos));
+      if (idMaquinaCostos !== null) parametros.set('id_maquina', String(idMaquinaCostos));
+
+      const consulta = parametros.toString();
+      const ruta = '/api/dashboard/costos-mensuales' + (consulta ? `?${consulta}` : '');
+
+      try {
+        const datos = await solicitar(ruta);
+        if (vigente) setCostosMensuales(datos);
+      } catch (error) {
+        console.error('Error al cargar costos mensuales:', error);
+        if (vigente) {
+          setErrorCostosMensuales('No se pudieron cargar los costos para el período y nivel seleccionado.');
+        }
+      } finally {
+        if (vigente) setCargandoCostos(false);
       }
-
-      if (hasta) {
-        parametros.append('hasta', hasta);
-      }
-
-      const ruta = parametros.toString()
-        ? `/api/dashboard/costos-mensuales?${parametros.toString()}`
-        : '/api/dashboard/costos-mensuales';
-
-      const datos = await solicitar(ruta);
-
-      setCostosMensuales(datos);
-
-    } catch (error) {
-
-      console.error(error);
-
-      setErrorCostosMensuales(
-        'No se pudieron cargar los costos del período seleccionado.'
-      );
-
-    } finally {
-
-      setCargandoCostos(false);
-
     }
+
+    consultarCostos();
+
+    return () => { vigente = false; };
+  }, [usuario, idPlantaCostos, idSectorCostos, idMaquinaCostos, filtroAplicado]);
+
+  function aplicarFiltrosCostos(e) {
+    e.preventDefault();
+    if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) return;
+    setFiltroAplicado({ desde: fechaDesde, hasta: fechaHasta });
   }
 
+  function limpiarFiltrosCostos() {
+    setFechaDesde('');
+    setFechaHasta('');
+    setFiltroAplicado({ desde: '', hasta: '' });
+  }
 
   async function cargarMantenimientosPorTipo() {
 
@@ -569,7 +691,6 @@ function App() {
   async function cargarDashboard() {
     cargarMantenimientosPorTipo();
     cargarProveedores();
-    cargarCostosMensuales();
     setErrorGeneral('');
     const resultados = await Promise.allSettled([
       solicitar('/api/dashboard/resumen'),
@@ -693,6 +814,20 @@ function App() {
     setErrorNavegacion('');
   }
 
+  // Propiedades compartidas por las cuatro vistas de costos.
+  const propsCostos = {
+    costosMensuales,
+    errorCostosMensuales,
+    cargandoCostos,
+    fechaDesde,
+    fechaHasta,
+    filtroAplicado,
+    setFechaDesde,
+    setFechaHasta,
+    aplicarFiltros: aplicarFiltrosCostos,
+    limpiarFiltros: limpiarFiltrosCostos
+  };
+
   if (!usuario) {
     return (
       <div className="login-page">
@@ -756,6 +891,11 @@ function App() {
             <p>Semáforo actual: <Semaforo valor={maquinaSeleccionada.semaforo} /></p>
             <p>Fecha de instalación: {fecha(maquinaSeleccionada.fecha_instalacion)}</p>
           </section>
+
+          <SeccionCostosMensuales
+            contexto={`Máquina: ${maquinaSeleccionada.maquina}`}
+            {...propsCostos}
+          />
 
           <section className="dashboard-seccion">
             <h3>Fallas por criticidad de esta máquina</h3>
@@ -852,6 +992,11 @@ function App() {
           <h2>Sector: {sectorSeleccionado.sector}</h2>
           <p className="subtitulo-dashboard">Seleccioná una máquina para ver sus registros.</p>
 
+          <SeccionCostosMensuales
+            contexto={`Sector: ${sectorSeleccionado.sector}`}
+            {...propsCostos}
+          />
+
           <section className="dashboard-seccion">
             <h3>Distribución del semáforo en este sector</h3>
             <div className="graficos-grid">
@@ -899,6 +1044,11 @@ function App() {
           <p className="subtitulo-dashboard">
             {plantaSeleccionada.ciudad}, {plantaSeleccionada.provincia}
           </p>
+          <SeccionCostosMensuales
+            contexto={`Planta: ${plantaSeleccionada.nombre}`}
+            {...propsCostos}
+          />
+
           <h3>Análisis de la planta</h3>
           <div className="graficos-grid">
             <article className="grafico-card">
@@ -993,134 +1143,12 @@ function App() {
           </section>
 
           
-          {/* EVOLUCION MENSUAL DE COSTOS */}
+          {/* COSTOS DEL DASHBOARD GENERAL */}
+          <SeccionCostosMensuales
+            contexto="todas las plantas"
+            {...propsCostos}
+          />
 
-          <section className="dashboard-seccion">
-
-            <h2>Evolución mensual de costos</h2>
-
-            <p className="subtitulo-dashboard">
-              Comparación de los costos registrados
-              de mantenimiento y reparación por mes.
-            </p>
-            
-            {/* FILTROS DE FECHAS */}
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                cargarCostosMensuales(fechaDesde, fechaHasta);
-              }}
-              className="filtros-fechas"
-              style={{
-                display: 'flex',
-                gap: '12px',
-                flexWrap: 'wrap',
-                alignItems: 'end',
-                marginBottom: '20px'
-              }}
-            >
-
-              <label>
-                Fecha desde
-
-                <input
-                  type="date"
-                  value={fechaDesde}
-                  onChange={(e) => setFechaDesde(e.target.value)}
-                  style={{
-                    display: 'block',
-                    padding: '10px',
-                    marginTop: '6px'
-                  }}
-                />
-              </label>
-
-              <label>
-                Fecha hasta
-
-                <input
-                  type="date"
-                  value={fechaHasta}
-                  onChange={(e) => setFechaHasta(e.target.value)}
-                  style={{
-                    display: 'block',
-                    padding: '10px',
-                    marginTop: '6px'
-                  }}
-                />
-              </label>
-
-              <button
-                type="submit"
-                className="boton-drill"
-                disabled={
-                  cargandoCostos ||
-                  Boolean(fechaDesde && fechaHasta && fechaDesde > fechaHasta)
-                }
-              >
-                Aplicar filtros
-              </button>
-
-              <button
-                type="button"
-                className="boton-volver"
-                disabled={cargandoCostos}
-                onClick={() => {
-
-                  setFechaDesde('');
-                  setFechaHasta('');
-
-                  cargarCostosMensuales();
-
-                }}
-              >
-                Limpiar filtros
-              </button>
-
-            </form>
-
-            {fechaDesde && fechaHasta && fechaDesde > fechaHasta && (
-              <p className="mensaje-error">
-                La fecha inicial no puede ser posterior a la final.
-              </p>
-            )}
-
-            {cargandoCostos && (
-              <p>Actualizando costos...</p>
-            )}
-
-            {errorCostosMensuales ? (
-
-              <p className="mensaje-error">
-                {errorCostosMensuales}
-              </p>
-
-            ) : costosMensuales === null ? (
-
-              <p>Cargando evolución mensual...</p>
-
-            ) : (
-
-              <div className="graficos-grid">
-
-                <article className="grafico-card">
-
-                  <h3>Costos por mes</h3>
-
-                  <GraficoCostosMensuales
-                    filas={costosMensuales}
-                  />
-
-                </article>
-
-              </div>
-
-            )}
-
-          </section>
-          
-          
           {/* MANTENIMIENTOS POR TIPO */}
 
           <section className="dashboard-seccion">
